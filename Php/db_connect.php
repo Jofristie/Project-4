@@ -1,18 +1,20 @@
 <?php
-$host = 'localhost';
-$dbname = 'chefs-choice';
-$username = 'root';
-$password = '';
 
-try {
-    $pdo = new PDO(
-        "mysql:host=$host;dbname=$dbname;charset=utf8",
-        $username,
-        $password
-    );
+$host = "localhost";
+$user = "root";
+$password = "";
+$database = "projectwebsite";
 
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("Database fout: " . $e->getMessage());
+$conn = mysqli_connect(
+    $host,
+    $user,
+    $password,
+    $database
+);
+
+if (!$conn) {
+    die("Verbinding mislukt: " . mysqli_connect_error());
 }
+
+echo "Verbonden!";
 ?>
