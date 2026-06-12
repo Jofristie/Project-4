@@ -1,20 +1,16 @@
 <?php
+define('DB_HOST', 'localhost');
+define('DB_USER', 'root');
+define('DB_PASS', '');
+define('DB_NAME', 'chefs_choice');
 
-$host = "localhost";
-$user = "root";
-$password = "";
-$database = "projectwebsite";
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 
-$conn = mysqli_connect(
-    $host,
-    $user,
-    $password,
-    $database
-);
-
-if (!$conn) {
-    die("Verbinding mislukt: " . mysqli_connect_error());
+if ($conn->connect_error) {
+    die(json_encode([
+        'error' => 'Verbinding mislukt: ' . $conn->connect_error
+    ]));
 }
 
-echo "Verbonden!";
+$conn->set_charset('utf8mb4');
 ?>
