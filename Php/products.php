@@ -58,7 +58,7 @@ if (isset($_SESSION['cart'])) {
                 <?php foreach ($items as $p): ?>
                 <article class="product-card">
                     <a href="product.php?id=<?= $p['id'] ?>" class="product-img-link">
-                        <img src="<?= !empty($p['image']) ? '../images/products/' . htmlspecialchars($p['image']) : '../images/placeholder.jpg' ?>"
+                        <img src="<?= !empty($p['image']) ? '../images/' . htmlspecialchars($p['image']) : '../images/placeholder.jpg' ?>"
                              alt="<?= htmlspecialchars($p['name']) ?>" class="product-img">
                     </a>
                     <div class="product-info">
