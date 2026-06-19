@@ -22,33 +22,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($stad))     $errors[] = 'Stad is verplicht.';
 
     if (empty($errors)) {
+        // Totaal + korting berekenen
         $total = 0;
-        foreach ($_SESSION['cart'] as $item) $total += $item['price'] * $item['qty'];
-        $verzendkosten = $total >= 75 ? 0 : 5.95;
-        $totaal_incl   = $total + $verzendkosten;
+        foreach ($_SESSION['cart'] as $item) {
+            $total += $item['price'] * $item['qty'];
+        }
 
-        $stmt = $conn->prepare("INSERT INTO orders (naam, email, telefoon, adres, postcode, stad, opmerking, totaal, verzendkosten, status, aangemaakt)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'nieuw', NOW())");
-        $stmt->bind_param('sssssssdd', $naam, $email, $telefoon, $adres, $postcode, $stad, $opmerking, $totaal_incl, $verzendkosten);
+        $coupon   = $_SESSION['coupon'] ?? null;
+        $discount = $coupon ? $total * ($coupon['percent'] / 100) : 0;
+        $total_after_discount = $total - $discount;
+
+        $verzendkosten = $total_after_discount >= 75 ? 0 : 5.95;
+        $totaal_incl   = $total_after_discount + $verzendkosten;
+
+        // Order opslaan in database
+        $stmt = $conn->prepare("INSERT INTO orders (naam, email, telefoon, adres, postcode, stad, opmerking, totaal, korting, verzendkosten, status, aangemaakt)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'nieuw', NOW())");
+        $stmt->bind_param('sssssssddd', $naam, $email, $telefoon, $adres, $postcode, $stad, $opmerking, $totaal_incl, $discount, $verzendkosten);
         $stmt->execute();
         $order_id = $stmt->insert_id;
 
-        $line = $conn->prepare("INSERT INTO order_items (order_id, product_id, product_name, qty, prijs) VALUES (?, ?, ?, ?, ?)");
+        // Orderregels opslaan
+        $line = $conn->prepare("INSERT INTO order_items (order_id, product_id, product_name, qty, prijs)
+                                VALUES (?, ?, ?, ?, ?)");
         foreach ($_SESSION['cart'] as $item) {
             $line->bind_param('iisid', $order_id, $item['id'], $item['name'], $item['qty'], $item['price']);
             $line->execute();
             $conn->query("UPDATE products SET stock = stock - {$item['qty']} WHERE id = {$item['id']} AND stock >= {$item['qty']}");
         }
 
+        // Sessie opschonen
         $_SESSION['cart'] = [];
+        unset($_SESSION['coupon']);
         $_SESSION['last_order_id'] = $order_id;
-        header('Location: succes.php'); exit;
+
+        header('Location: succes.php');
+        exit;
     }
 }
 
+// Winkelwagen totaal + korting (voor weergave op de pagina)
 $total = 0;
-foreach ($_SESSION['cart'] as $item) $total += $item['price'] * $item['qty'];
-$verzendkosten = $total >= 75 ? 0 : 5.95;
+foreach ($_SESSION['cart'] as $item) {
+    $total += $item['price'] * $item['qty'];
+}
+
+$coupon   = $_SESSION['coupon'] ?? null;
+$discount = $coupon ? $total * ($coupon['percent'] / 100) : 0;
+$total_after_discount = $total - $discount;
+$verzendkosten = $total_after_discount >= 75 ? 0 : 5.95;
+
 $cart_count = array_sum(array_column($_SESSION['cart'], 'qty'));
 ?>
 <!DOCTYPE html>
@@ -135,7 +158,18 @@ $cart_count = array_sum(array_column($_SESSION['cart'], 'qty'));
             </div>
             <?php endforeach; ?>
             <hr>
-            <div class="summary-row"><span>Subtotaal</span><span>€<?= number_format($total, 2, ',', '.') ?></span></div>
+            <div class="summary-row">
+                <span>Subtotaal</span>
+                <span>€<?= number_format($total, 2, ',', '.') ?></span>
+            </div>
+
+            <?php if ($coupon): ?>
+            <div class="summary-row discount-row">
+                <span>Korting (<?= htmlspecialchars($coupon['code']) ?>)</span>
+                <span>-€<?= number_format($discount, 2, ',', '.') ?></span>
+            </div>
+            <?php endif; ?>
+
             <div class="summary-row">
                 <span>Verzendkosten</span>
                 <span><?= $verzendkosten === 0 ? '<strong>Gratis</strong>' : '€' . number_format($verzendkosten, 2, ',', '.') ?></span>
@@ -143,7 +177,7 @@ $cart_count = array_sum(array_column($_SESSION['cart'], 'qty'));
             <hr>
             <div class="summary-row total-row">
                 <span>Totaal</span>
-                <span>€<?= number_format($total + $verzendkosten, 2, ',', '.') ?></span>
+                <span>€<?= number_format($total_after_discount + $verzendkosten, 2, ',', '.') ?></span>
             </div>
         </div>
     </div>
@@ -155,6 +189,7 @@ $cart_count = array_sum(array_column($_SESSION['cart'], 'qty'));
         <p class="footer-copy">© <?= date('Y') ?> Chef's Choice.</p>
     </div>
 </footer>
+
 <script src="../Js/Placeholder.js"></script>
 </body>
 </html>

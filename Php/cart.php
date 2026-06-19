@@ -4,6 +4,7 @@ session_start();
 
 if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
 
+// Acties verwerken
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action     = $_POST['action'] ?? '';
     $product_id = (int)($_POST['product_id'] ?? 0);
@@ -39,11 +40,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         unset($_SESSION['cart'][$product_id]);
         header('Location: cart.php'); exit;
     }
+
+    // Kortingscode toepassen
+    if ($action === 'apply_coupon') {
+        $code = trim($_POST['coupon_code'] ?? '');
+        if (strtoupper($code) === 'CHEFSCHOICE20') {
+            $_SESSION['coupon'] = ['code' => 'CHEFSCHOICE20', 'percent' => 20];
+        } else {
+            $_SESSION['coupon_error'] = 'Ongeldige kortingscode.';
+        }
+        header('Location: cart.php'); exit;
+    }
+
+    // Kortingscode verwijderen
+    if ($action === 'remove_coupon') {
+        unset($_SESSION['coupon']);
+        header('Location: cart.php'); exit;
+    }
 }
 
+// Winkelwagen totaal berekenen
 $total = 0;
 $cart  = $_SESSION['cart'];
-foreach ($cart as $item) $total += $item['price'] * $item['qty'];
+foreach ($cart as $item) {
+    $total += $item['price'] * $item['qty'];
+}
+
+// Korting berekenen
+$discount = 0;
+$coupon   = $_SESSION['coupon'] ?? null;
+if ($coupon) {
+    $discount = $total * ($coupon['percent'] / 100);
+}
+$total_after_discount = $total - $discount;
+$verzendkosten         = $total_after_discount >= 75 ? 0 : 5.95;
+
 $cart_count = array_sum(array_column($cart, 'qty'));
 ?>
 <!DOCTYPE html>
@@ -81,12 +112,17 @@ $cart_count = array_sum(array_column($cart, 'qty'));
             <a href="webshop.php" class="btn-primary">Verder winkelen</a>
         </div>
     <?php else: ?>
+
     <div class="cart-layout">
         <div class="cart-items">
             <table class="cart-table">
                 <thead>
                     <tr>
-                        <th>Product</th><th>Prijs</th><th>Aantal</th><th>Subtotaal</th><th></th>
+                        <th>Product</th>
+                        <th>Prijs</th>
+                        <th>Aantal</th>
+                        <th>Subtotaal</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -111,7 +147,7 @@ $cart_count = array_sum(array_column($cart, 'qty'));
                             <form method="POST" action="cart.php">
                                 <input type="hidden" name="action" value="remove">
                                 <input type="hidden" name="product_id" value="<?= $item['id'] ?>">
-                                <button type="submit" class="btn-remove">✕</button>
+                                <button type="submit" class="btn-remove" title="Verwijder">✕</button>
                             </form>
                         </td>
                     </tr>
@@ -122,32 +158,71 @@ $cart_count = array_sum(array_column($cart, 'qty'));
 
         <div class="cart-summary">
             <h2>Overzicht</h2>
-            <div class="summary-row"><span>Subtotaal</span><span>€<?= number_format($total, 2, ',', '.') ?></span></div>
+
+            <div class="summary-row">
+                <span>Subtotaal</span>
+                <span>€<?= number_format($total, 2, ',', '.') ?></span>
+            </div>
+
+            <?php if ($coupon): ?>
+            <div class="summary-row discount-row">
+                <span>Korting (<?= htmlspecialchars($coupon['code']) ?>)</span>
+                <span>-€<?= number_format($discount, 2, ',', '.') ?></span>
+            </div>
+            <?php endif; ?>
+
             <div class="summary-row">
                 <span>Verzendkosten</span>
-                <span><?= $total >= 75 ? '<strong>Gratis</strong>' : '€5,95' ?></span>
+                <span><?= $verzendkosten === 0 ? '<strong>Gratis</strong>' : '€' . number_format($verzendkosten, 2, ',', '.') ?></span>
             </div>
-            <?php if ($total < 75): ?>
-            <p class="shipping-note">Nog €<?= number_format(75 - $total, 2, ',', '.') ?> voor gratis verzending.</p>
+
+            <?php if ($total_after_discount < 75): ?>
+            <p class="shipping-note">Nog €<?= number_format(75 - $total_after_discount, 2, ',', '.') ?> voor gratis verzending.</p>
             <?php endif; ?>
+
             <hr>
             <div class="summary-row total-row">
                 <span>Totaal</span>
-                <span>€<?= number_format($total + ($total >= 75 ? 0 : 5.95), 2, ',', '.') ?></span>
+                <span>€<?= number_format($total_after_discount + $verzendkosten, 2, ',', '.') ?></span>
             </div>
+
+            <!-- KORTINGSCODE -->
+            <div class="coupon-box">
+                <?php if (!empty($_SESSION['coupon_error'])): ?>
+                    <p class="coupon-error"><?= htmlspecialchars($_SESSION['coupon_error']) ?></p>
+                    <?php unset($_SESSION['coupon_error']); ?>
+                <?php endif; ?>
+
+                <?php if ($coupon): ?>
+                    <form method="POST" action="cart.php" class="coupon-form">
+                        <input type="hidden" name="action" value="remove_coupon">
+                        <p class="coupon-applied">✓ Code <strong><?= htmlspecialchars($coupon['code']) ?></strong> toegepast</p>
+                        <button type="submit" class="btn-remove-coupon">Verwijderen</button>
+                    </form>
+                <?php else: ?>
+                    <form method="POST" action="cart.php" class="coupon-form">
+                        <input type="hidden" name="action" value="apply_coupon">
+                        <input type="text" name="coupon_code" placeholder="Kortingscode">
+                        <button type="submit" class="btn-coupon">Toepassen</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+
             <a href="checkout.php" class="btn-primary btn-full">Bestelling plaatsen</a>
             <a href="webshop.php" class="btn-secondary btn-full">Verder winkelen</a>
         </div>
     </div>
+
     <?php endif; ?>
 </main>
 
 <footer class="site-footer">
     <div class="container footer-inner">
         <img src="../images/logo.png" alt="Chef's Choice" class="footer-logo">
-        <p class="footer-copy">© <?= date('Y') ?> Chef's Choice.</p>
+        <p class="footer-copy">© <?= date('Y') ?> Chef's Choice. Alle rechten voorbehouden.</p>
     </div>
 </footer>
+
 <script src="../Js/Placeholder.js"></script>
 </body>
 </html>
